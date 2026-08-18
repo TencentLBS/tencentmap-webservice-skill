@@ -78,35 +78,6 @@ GET /ws/place/v1/search?key=YOUR_KEY&keyword=酒店&boundary=region(北京,0,39.
 
 ---
 
-## 沿途搜索
-
-在路线规划结果的沿途搜索 POI，适用于"沿途加油站"、"途经服务区"等场景。
-
-**使用方式**: 先调用路线规划接口获取路线 polyline（折线坐标串），再使用地点搜索接口配合 `boundary=along` 参数进行沿途搜索。
-
-**接口**: `GET /ws/place/v1/search`
-
-**请求参数**:
-- `key` (必填): 开发密钥
-- `keyword` (必填): 搜索关键词（如"加油站"、"服务区"）
-- `boundary` (必填): `along(lat1,lng1;lat2,lng2;..., distance)` - 沿途搜索
-  - 折线坐标串：从路线规划接口返回的 polyline 坐标点
-  - distance：搜索偏移距离（米），沿线两侧搜索范围
-- `page_size` (可选): 每页结果数
-- `page_index` (可选): 页码
-
-**请求示例**:
-```
-GET /ws/place/v1/search?key=YOUR_KEY&keyword=加油站&boundary=along(39.984154,116.307490;39.974154,116.317490;39.964154,116.327490, 2000)
-```
-
-**典型使用流程**:
-1. 调用驾车路线规划接口获取路线
-2. 从路线结果中提取 polyline 坐标串
-3. 使用 `boundary=along(polyline, distance)` 搜索沿途 POI
-
----
-
 ## 关键词输入提示
 
 搜索框自动补全建议，帮助用户快速输入。

@@ -1,7 +1,7 @@
 ---
 name: tencentmap-webservice-skill
-version: 1.0.2
-description: "腾讯位置服务 WebService API 开发技能。 当开发者需要通过 HTTP 接口集成地理编码、地点搜索、路线规划、天气查询、IP 定位等位置服务时，此技能提供完整的 API 调用指导。适用场景：(1) 地址与坐标互转 (2) 地点搜索与周边 POI 查询 (3) 关键词输入提示与自动补全 (4) 沿途搜索 (5) 路线规划（驾车/步行/骑行/电动车/公交）(6) 距离矩阵与批量距离计算 (7) IP 定位 (8) 天气查询 (9) 智能地址解析 (10) 坐标系转换 (11) 行政区划查询。不包含地图渲染和前端可视化，仅提供 HTTP JSON 数据接口。当用户提到地理编码、地址转坐标、逆地址解析、POI 搜索、路线规划、距离矩阵、批量距离、天气查询、IP 定位、坐标转换、行政区划、输入提示、自动补全、WebService API 时触发。"
+version: 1.0.4
+description: "腾讯位置服务 WebService API 开发技能。 当开发者需要通过 HTTP 接口集成地理编码、地点搜索、路线规划、天气查询、IP 定位等位置服务时，此技能提供完整的 API 调用指导。适用场景：(1) 地址与坐标互转 (2) 地点搜索与周边 POI 查询 (3) 关键词输入提示与自动补全 (4) 路线规划（驾车/步行/骑行/电动车/公交）(5) 距离矩阵与批量距离计算 (6) IP 定位 (7) 天气查询 (8) 智能地址解析 (9) 坐标系转换 (10) 行政区划查询。不包含地图渲染和前端可视化，仅提供 HTTP JSON 数据接口。当用户提到地理编码、地址转坐标、逆地址解析、POI 搜索、路线规划、距离矩阵、批量距离、天气查询、IP 定位、坐标转换、行政区划、输入提示、自动补全、WebService API 时触发。"
 ---
 
 # 腾讯位置服务 WebService API
@@ -36,29 +36,27 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 - 从非结构化文本提取地址
 - 在不同坐标系之间互转
 - 查询行政区划信息
+- 用户指定或要求保存腾讯地图 Key
 - 包含"地理编码"、"搜索"、"路线"、"天气"、"定位"、"坐标"、"距离矩阵"等关键词
 
-## 前置检查：API Key
+## Key 处理
 
-**仅在实际调用 API 时检查 Key**——纯咨询类问题（如"支持什么 API"）直接回答，不要求 Key。
+按此顺序自动获取 Key：`Client(key=...)` → 已保存的 Key。各来源的 Key 会全部进入候选池。
 
-需要调用但未检测到 Key（环境变量 `TMAP_WEBSERVICE_KEY` 或对话中提供）时，向用户输出以下选项：
-
-> - **申请临时体验 Key（推荐）**：手机验证即可，14 天有效
-> - **前往官网注册正式 Key**：https://lbs.qq.com/dev/console/key/manage （注册后需为 Key 开启 **WebService** 功能）
-
-用户选择"申请临时 Key" → 读取 `tempkey-guide.md` 按其中步骤执行
+1. **用户提供 Key**——先调用 `client.save_key("<key>")` 保存到本地配置，再执行主任务。保存后该 Key 自动进入候选池首位，后续请求无需再传。
+2. **无可用 Key**——读取 `tempkey-guide.md`，引导用户申请临时体验 Key。
+3. **Key 报错**——调用 `client.switch_key()` 轮询候选池切换到下一个可用 Key，并告知用户切换情况；全部不可用时，说明每个 Key 的失败原因与修正方式。
 
 ---
 
 ## 场景判断
 
-收到用户请求后，先判断属于哪个场景：
+收到用户请求后，先按 Key 处理流程检查/保存 Key，再判断属于哪个场景：
 
 | 场景 | 用户意图 | 参考文档 |
 |------|----------|----------|
 | **地址服务** | 地址↔坐标互转、智能地址解析 | `references/api-geocoder.md` |
-| **搜索服务** | 地点搜索、周边 POI、沿途搜索、输入提示、行政区划 | `references/api-search.md` |
+| **搜索服务** | 地点搜索、周边 POI、输入提示、行政区划 | `references/api-search.md` |
 | **路线服务** | 驾车/步行/骑行/公交路线规划、距离矩阵 | `references/api-direction.md` |
 | **定位与天气** | IP 定位、天气查询 | `references/api-location-weather.md` |
 | **坐标转换** | 其他坐标系转入腾讯地图坐标系 | `references/api-tools.md` |
@@ -69,7 +67,7 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 
 1. **先解决坐标获取**：地址解析 / IP 定位 / 坐标转换 — 确保后续操作有可用坐标
 2. **再执行目标操作**：搜索 / 路线规划 / 天气查询 — 使用第一步获取的坐标
-3. **最后处理后续操作**：沿途搜索依赖路线结果的 polyline，距离矩阵依赖坐标集合
+3. **最后处理后续操作**：距离矩阵依赖坐标集合
 
 ## 场景一：地址服务
 
@@ -78,15 +76,15 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 - **地址解析**: `GET /ws/geocoder/v1/` — 传入 `address` 参数，建议加 `region` 提高准确性
 - **逆地址解析**: `GET /ws/geocoder/v1/` — 传入 `location` 参数（纬度,经度），可用 `get_poi=1` 返回周边 POI
 - **智能地址解析**: `GET /ws/geocoder/v1/` — 使用 `smart_address` 参数（非 address），从快递单、聊天记录等文本提取地址和联系人信息。需企业认证开通
+  - 若存在调用报错的情况，告知用户：此接口为高级服务，需额外开通，可前往 [腾讯位置服务官网](https://lbs.qq.com/dev/console/ticket/categories) 登录后提交工单申请
 
 > 📖 详细参数、响应格式和示例见 [references/api-geocoder.md](references/api-geocoder.md)
 
 ## 场景二：搜索服务
 
-提供地点搜索、沿途搜索、关键词输入提示、行政区划查询四种能力。
+提供地点搜索、关键词输入提示、行政区划查询三种能力。
 
 - **地点搜索**: `GET /ws/place/v1/search` — 支持 `nearby()`/`region()`/`rectangle()` 边界格式（多边形搜索为独立接口 `/ws/place/v1/search_by_polygon`）
-- **沿途搜索**: `GET /ws/place/v1/search` — 使用 `boundary=along(polyline, distance)`，需先获取路线 polyline
 - **关键词提示**: `GET /ws/place/v1/suggestion` — 搜索框自动补全
 - **行政区划**: 三个子接口 — `GET /ws/district/v1/list`（全部列表）、`/getchildren`（下级区划）、`/search`（关键词搜索）
 
@@ -141,7 +139,7 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 | `112` | IP 未被授权 | 在控制台添加服务器 IP 白名单 |
 | `113` | 此功能未被授权 | 在控制台开通对应 API 权限 |
 | `120` | QPS 限制（每秒请求量达上限） | 等待 1-2 秒后重试，或合并请求 |
-| `121` | 日调用量达上限 | 升级配额或更换 Key |
+| `121` | 日调用量达上限 | 前往控制台分配额度或更换 Key |
 | `190` | 无效的 Key | 确认 Key 是否已被删除或禁用 |
 | `199` | 此 Key 未开启 WebService 功能 | 在控制台为 Key 启用 WebService |
 
@@ -176,10 +174,10 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 
 ## 最佳实践
 
-1. **地址解析指定 `region`** — 提高准确性，避免跨城市歧义
+1. **地址解析`address`应包含城市名，并指定 `region`，** — 提高准确性，避免跨城市歧义
    ```
-   # ✅ 指定城市
-   GET /ws/geocoder/v1/?address=中关村大街1号&region=北京&key=YOUR_KEY
+   # ✅ address 含完整城市名
+   GET /ws/geocoder/v1/?address=北京市海淀区中关村大街1号&region=北京&key=YOUR_KEY
    # ❌ 不指定城市，可能匹配到其他城市的同名地址
    GET /ws/geocoder/v1/?address=中关村大街1号&key=YOUR_KEY
    ```
@@ -214,14 +212,12 @@ description: "腾讯位置服务 WebService API 开发技能。 当开发者需�
 
 6. **天气查询优先用经纬度** — 可精确到区县级，比 adcode 更灵活
 
-7. **沿途搜索需先规划路线** — 先获取 polyline，再搜索 POI，不能跳过路线规划步骤
-
 ## 文档引用
 
 | 文件 | 说明 |
 |------|------|
 | [references/api-geocoder.md](references/api-geocoder.md) | 地址解析、逆地址解析、智能地址解析 |
-| [references/api-search.md](references/api-search.md) | 地点搜索、沿途搜索、关键词提示、行政区划 |
+| [references/api-search.md](references/api-search.md) | 地点搜索、关键词提示、行政区划 |
 | [references/api-direction.md](references/api-direction.md) | 路线规划（驾车/步行/骑行/公交）、距离矩阵 |
 | [references/api-location-weather.md](references/api-location-weather.md) | IP 定位、天气查询 |
 | [references/api-tools.md](references/api-tools.md) | 坐标转换、公共错误码 |

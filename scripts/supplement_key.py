@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-create_key.py — 校验短信验证码并创建/获取 Key
+supplement_key.py — 补额 / 新建 Key（supplement 接口）
 
 用法:
-    python create_key.py <phone> <verify_code> <session_token>
+    python supplement_key.py <supplement_token> reuse <mkey>
+    python supplement_key.py <supplement_token> create
 
-成功输出（三种 type）:
-    {"error": 0, "type": "created", "key": "xxx", "expire_time": "2027-07-17 19:59:59"}
-    {"error": 0, "type": "created", "key": "xxx", "expire_time": "...", "is_existing": true}
-    {"error": 0, "type": "reused",  "key": "xxx", "expire_time": "...", "is_existing": true}
-    {"error": 0, "type": "select",  "key_list": [...], "supplement_token": "...", "supplement_token_expire": 300}
+成功输出:
+    {"error": 0, "type": "reused",  "key": "xxx", "expire_time": "...", "is_existing": true}   # action=reuse
+    {"error": 0, "type": "created", "key": "xxx", "expire_time": "..."}                        # action=create
 
 失败输出:
     {"error": <code>, "msg": "<错误码字符串>"}
@@ -31,8 +30,7 @@ except ImportError:
     _SSL_CONTEXT = ssl.create_default_context()
 
 API_HOST = "lbsconsole.map.qq.com"
-API_URL = f"https://{API_HOST}/nosession/http/skill/v2/tempkey/create"
-SCENE = 1  # 固定 Skill 场景
+API_URL = f"https://{API_HOST}/nosession/http/skill/v2/tempkey/supplement"
 
 
 def make_headers():
@@ -47,16 +45,16 @@ def make_headers():
     }
 
 
-def create_key(phone: str, verify_code: str, session_token: str) -> dict:
-    payload = json.dumps({
-        "customer_phone": phone,
-        "verify_code": verify_code,
-        "session_token": session_token,
-        "scene": SCENE,
-    }).encode("utf-8")
+def supplement(supplement_token: str, action: str, mkey: str = "") -> dict:
+    payload = {"supplement_token": supplement_token, "action": action}
+    if action == "reuse":
+        if not mkey:
+            return {"error": -1, "msg": "action=reuse 时必须提供 mkey"}
+        payload["mkey"] = mkey
+    payload_bytes = json.dumps(payload).encode("utf-8")
     headers = make_headers()
 
-    req = urllib.request.Request(API_URL, data=payload, headers=headers, method="POST")
+    req = urllib.request.Request(API_URL, data=payload_bytes, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT) as resp:
             body = json.loads(resp.read().decode("utf-8"))
@@ -73,30 +71,35 @@ def create_key(phone: str, verify_code: str, session_token: str) -> dict:
     if ret == 0:
         # 响应结构：{"info":{"error":0,"msg":"成功"},"detail":{...业务字段...}}
         data = body.get("detail") or {}
-        resp_type = data.get("type", "")
-        result = {"error": 0, "type": resp_type}
-        if resp_type in ("created", "reused"):
-            result["key"] = data.get("key", "")
-            result["expire_time"] = data.get("expire_time", "")
-            if "is_existing" in data:
-                result["is_existing"] = data["is_existing"]
-        elif resp_type == "select":
-            result["key_list"] = data.get("key_list", [])
-            result["supplement_token"] = data.get("supplement_token", "")
-            result["supplement_token_expire"] = data.get("supplement_token_expire", 300)
+        result = {
+            "error": 0,
+            "type": data.get("type", ""),
+            "key": data.get("key", ""),
+            "expire_time": data.get("expire_time", ""),
+        }
+        if "is_existing" in data:
+            result["is_existing"] = data["is_existing"]
         return result
     else:
         return {"error": ret, "msg": info.get("msg", "UNKNOWN")}
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 3:
         print(json.dumps(
-            {"error": -1, "msg": "用法: create_key.py <phone> <verify_code> <session_token>"},
+            {"error": -1, "msg": "用法: supplement_key.py <supplement_token> reuse <mkey>  |  supplement_key.py <supplement_token> create"},
             ensure_ascii=False
         ))
         sys.exit(1)
 
-    result = create_key(sys.argv[1], sys.argv[2], sys.argv[3])
+    token = sys.argv[1]
+    action = sys.argv[2]
+    mkey = sys.argv[3] if len(sys.argv) > 3 else ""
+
+    if action not in ("reuse", "create"):
+        print(json.dumps({"error": -1, "msg": "action 必须为 reuse 或 create"}, ensure_ascii=False))
+        sys.exit(1)
+
+    result = supplement(token, action, mkey)
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(0 if result["error"] == 0 else 1)
